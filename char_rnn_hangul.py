@@ -54,4 +54,98 @@ with tf.device("/cpu:0"):
             embedding = tf.get_variable("embedding", [vocab_size, rnn_size])
             inputs = tf.split(1, _seq_length, tf.nn.embedding_lookup(embedding, input_data))
             inputs = [tf.squeeze(input_, [1]) for input_ in inputs]
-    #loop
+
+
+    # loop function for seq2seq
+    def loop(prev, _):
+        prev = tf.nn.xw_plus_b(prev, softmax_w, softmax_b)
+        prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
+        return tf.nn.embedding_lookup(embedding, prev_symbol)
+
+
+    # output of rnn
+    outputs, last_state = tf.nn.seq2seq.rnn_decoder(inputs, initial_state, cell, loop_function=None, scope='rnnlm')
+
+    output = tf.reshape(tf.concat(1, outputs), [-1, rnn_size])
+    logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
+
+    # nexxt word prob
+    probs = tf.nn.softmax(logits)
+
+    # define loss
+    loss = tf.nn.seq2seq.sequence_loss_by_example([logits],  # Input
+                                                  [tf.reshape(targets, [-1])],  # Target
+                                                  [tf.ones([_batch_size * _seq_length])],  # Weight
+                                                  vocab_size)
+    # Define Optimizer
+    cost = tf.reduce_sum(loss) / _batch_size / _seq_length
+    final_state = last_state
+    lr = tf.Variable(0.0, trainable=False)
+    tvars = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(tf.gradients(cost, tvars), grad_clip)
+    _optm = tf.train.AdamOptimizer(lr)
+    optm = _optm.apply_gradients(zip(grads, tvars))
+
+print ("network ready")
+
+
+# sample
+def sample(sess, chars, vocab, __probs, num=200, prime=''):
+    state = sess.run(cell.zero_state(1, tf.float32))
+    _probs = __probs
+    prime = list(prime)
+    for char in prime[:-1]:
+        x = np.zeros((1, 1))
+        x[0, 0] = vocab[char]
+        feed = {input_data: x, initial_state: state}
+        [state] = sess.run([final_state], feed)
+
+    def weighted_pick(weights):
+        weights = weights / np.sum(weights)
+        t = np.cumsum(weights)
+        s = np.sum(weights)
+        return (int(np.searchsorted(t, np.random.rand(1) * s)))
+
+    ret = prime
+    char = prime[-1]
+    for n in range(num):
+        x = np.zeros((1, 1))
+        x[0, 0] = vocab[char]
+        feed = {input_data: x, initial_state: state}
+        [_probsval, state] = sess.run([_probs, final_state], feed)
+        p = _probsval[0]
+        sample = int(np.random.choice(len(p), p=p))
+        # sample = weighted_pick(p)
+        # sample = np.argmax(p)
+        pred = chars[sample]
+        ret += pred
+        char = pred
+    return ret
+
+
+print ("sampling function done.")
+
+save_dir = 'data/nine_dreams'
+prime = decompose_text(u"누구 ")
+
+print ("Prime Text : %s => %s" % (automata(prime), "".join(prime)))
+n = 2000
+
+sess = tf.Session()
+sess.run(tf.initialize_all_variables())
+saver = tf.train.Saver(tf.all_variables())
+ckpt = tf.train.get_checkpoint_state(save_dir)
+
+# load_name = u'data/nine_dreams/model.ckpt-0'
+load_name = u'data/nine_dreams/model.ckpt-99000'
+
+print (load_name)
+
+if ckpt and ckpt.model_checkpoint_path:
+    saver.restore(sess, load_name)
+    sampled_text = sample(sess, chars, vocab, probs, n, prime)
+    # print ("")
+    print (u"SAMPLED TEXT = %s" % sampled_text)
+    print ("")
+    print ("-- RESULT --")
+    print ("".join(sampled_text))
