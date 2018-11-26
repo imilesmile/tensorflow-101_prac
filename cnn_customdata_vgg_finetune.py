@@ -213,3 +213,4 @@ for epoch in range(training_epochs):
             print (" Test accuracy: %.3f" % (test_acc))
 
 print ("Optimization Finished!")
+
