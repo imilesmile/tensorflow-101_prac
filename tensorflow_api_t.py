@@ -3,6 +3,8 @@
 import tensorflow as tf
 from tensorflow import int32
 
+
+
 sess = tf.Session()
 # ==============================================================================================================================================================
 # one-hot
@@ -319,3 +321,12 @@ with tf.Session() as sess:
     print(sess.run(tf.shape(a_array)))
     print(sess.run(tf.shape(b_list)))
     print(sess.run(tf.shape(c_tensor)))
+
+# nest.flatten()
+# 将嵌套结构压平，返回Python的list。
+from tensorflow.python.util import nest
+input = [['a', 'b', 'c'],
+        ['d', 'e', 'f'],
+        ['1', '2', '3']]
+
+result = nest.flatten(input)
